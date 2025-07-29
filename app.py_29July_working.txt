@@ -1,0 +1,490 @@
+import streamlit as st
+import streamlit as st
+import os
+import os
+import subprocess
+import subprocess
+import tempfile
+import tempfile
+from pathlib import Path
+from pathlib import Path
+import shutil
+import shutil
+import zipfile
+import zipfile
+import re
+# --- Configuration for Base Directory ---
+# --- Configuration for Base Directory ---
+BASE_TESTING_DIR = Path("C:/Users/lakebridge/Lakebridge-Testing-Files")
+BASE_TESTING_DIR = Path("C:/Users/lakebridge/Lakebridge-Testing-Files")
+# Title
+# Title
+st.image("assets/tiger_icon.png", width=100)
+st.image("assets/tiger_icon.png", width=100)
+st.title("?? Tiger CodeAnalyzer")
+st.title("?? Tiger CodeAnalyzer")
+# Input source section
+# Input source section
+st.subheader("?? Provide Input Source Code")
+st.subheader("?? Provide Input Source Code")
+upload_option = st.radio("Choose input method:", ["Upload Files", "Upload Folder (Zip)"])
+upload_option = st.radio("Choose input method:", ["Upload Files", "Upload Folder (Zip)"])
+uploaded_files = None
+uploaded_files = None
+zip_file_input = None
+zip_file_input = None
+if upload_option == "Upload Files":
+if upload_option == "Upload Files":
+    uploaded_files = st.file_uploader("Upload .sql / .xml files", accept_multiple_files=True, type=['sql', 'xml'])
+    uploaded_files = st.file_uploader("Upload .sql / .xml files", accept_multiple_files=True, type=['sql', 'xml'])
+elif upload_option == "Upload Folder (Zip)":
+elif upload_option == "Upload Folder (Zip)":
+    zip_file_input = st.file_uploader("Upload .zip file", type=['zip'])
+    zip_file_input = st.file_uploader("Upload .zip file", type=['zip'])
+# Dropdown for technology selection
+# Dropdown for technology selection
+tech_options_display = [
+tech_options_display = [
+    "ABInitio", "ADF", "Alteryx", "Athena", "BigQuery", "BODS", "Cloudera (Impala)",
+    "ABInitio", "ADF", "Alteryx", "Athena", "BigQuery", "BODS", "Cloudera (Impala)",
+    "Datastage", "Greenplum", "Hive", "IBM DB2", "Informatica - Big Data Edition",
+    "Datastage", "Greenplum", "Hive", "IBM DB2", "Informatica - Big Data Edition",
+    "Informatica - PC", "Informatica Cloud", "MS SQL Server", "Netezza", "Oozie",
+    "Informatica - PC", "Informatica Cloud", "MS SQL Server", "Netezza", "Oozie",
+    "Oracle", "Oracle Data Integrator", "PentahoDI", "PIG", "Presto", "PySpark",
+    "Oracle", "Oracle Data Integrator", "PentahoDI", "PIG", "Presto", "PySpark",
+    "Redshift", "SAPHANA - CalcViews", "SAS", "Snowflake", "SPSS", "SQOOP", "SSIS",
+    "Redshift", "SAPHANA - CalcViews", "SAS", "Snowflake", "SPSS", "SQOOP", "SSIS",
+    "SSRS", "Synapse", "Talend", "Teradata", "Vertica", "Others"
+    "SSRS", "Synapse", "Talend", "Teradata", "Vertica", "Others"
+]
+]
+# --- VERIFIED MAPPING (based on common CLI patterns for tools like LakeBridge) ---
+# --- VERIFIED MAPPING (CLI formats) ---
+tech_options_cli_mapping = {
+tech_options_cli_mapping = {
+    "ABInitio": "ABInitio",
+    "ABInitio": "ABInitio",
+    "ADF": "ADF",
+    "ADF": "ADF",
+    "Alteryx": "Alteryx",
+    "Alteryx": "Alteryx",
+    "Athena": "Athena",
+    "Athena": "Athena",
+    "BigQuery": "BigQuery",
+    "BigQuery": "BigQuery",
+    "BODS": "BODS",
+    "BODS": "BODS",
+    "Cloudera (Impala)": "ClouderaImpala",
+    "Cloudera (Impala)": "ClouderaImpala",
+    "Datastage": "Datastage",
+    "Datastage": "Datastage",
+    "Greenplum": "Greenplum",
+    "Greenplum": "Greenplum",
+    "Hive": "Hive",
+    "Hive": "Hive",
+    "IBM DB2": "IBMDB2",
+    "IBM DB2": "IBMDB2",
+    "Informatica - Big Data Edition": "InformaticaBigDataEdition",
+    "Informatica - Big Data Edition": "InformaticaBigDataEdition",
+    "Informatica - PC": "Informatica - PC",
+    "Informatica - PC": "Informatica - PC",
+    "Informatica Cloud": "Informatica Cloud",
+    "Informatica Cloud": "Informatica Cloud",
+    "MS SQL Server": "MSSQLServer",
+    "MS SQL Server": "MSSQLServer",
+    "Netezza": "Netezza",
+    "Netezza": "Netezza",
+    "Oozie": "Oozie",
+    "Oozie": "Oozie",
+    "Oracle": "Oracle",
+    "Oracle": "Oracle",
+    "Oracle Data Integrator": "OracleDataIntegrator",
+    "Oracle Data Integrator": "OracleDataIntegrator",
+    "PentahoDI": "PentahoDI",
+    "PentahoDI": "PentahoDI",
+    "PIG": "PIG",
+    "PIG": "PIG",
+    "Presto": "Presto",
+    "Presto": "Presto",
+    "PySpark": "PySpark",
+    "PySpark": "PySpark",
+    "Redshift": "Redshift",
+    "Redshift": "Redshift",
+    "SAPHANA - CalcViews": "SAPHANACalcViews",
+    "SAPHANA - CalcViews": "SAPHANACalcViews",
+    "SAS": "SAS",
+    "SAS": "SAS",
+    "Snowflake": "Snowflake",
+    "Snowflake": "Snowflake",
+    "SPSS": "SPSS",
+    "SPSS": "SPSS",
+    "SQOOP": "SQOOP",
+    "SQOOP": "SQOOP",
+    "SSIS": "SSIS",
+    "SSIS": "SSIS",
+    "SSRS": "SSRS",
+    "SSRS": "SSRS",
+    "Synapse": "Synapse",
+    "Synapse": "Synapse",
+    "Talend": "Talend",
+    "Talend": "Talend",
+    "Teradata": "Teradata",
+    "Teradata": "Teradata",
+    "Vertica": "Vertica",
+    "Vertica": "Vertica",
+    "Others": "Generic"
+    "Others": "Generic"
+}
+}
+selected_tech_display = st.selectbox("Select Source Technology", tech_options_display)
+selected_tech_display = st.selectbox("Select Source Technology", tech_options_display)
+source_type_cli = tech_options_cli_mapping.get(selected_tech_display, "Generic")
+source_type_cli = tech_options_cli_mapping.get(selected_tech_display, "Generic")
+# --- FOLDER SANITIZATION ---
+source_type_folder = re.sub(r"[^\w]", "", source_type_cli)  # remove spaces & special characters
+# Analyze button
+# Analyze button
+if st.button("?? ANALYZE"):
+if st.button("?? ANALYZE"):
+    with st.spinner("Running analysis..."):
+    with st.spinner("Running analysis..."):
+        local_input_path = None
+        local_input_path = None
+        local_output_file = None
+        local_output_file = None
+        try:
+        try:
+            BASE_TESTING_DIR.mkdir(parents=True, exist_ok=True)
+            BASE_TESTING_DIR.mkdir(parents=True, exist_ok=True)
+            source_type_base_dir = BASE_TESTING_DIR.joinpath(source_type_cli)
+            source_type_base_dir = BASE_TESTING_DIR.joinpath(source_type_folder)
+            source_type_base_dir.mkdir(parents=True, exist_ok=True)
+            source_type_base_dir.mkdir(parents=True, exist_ok=True)
+            input_dir_persistent = source_type_base_dir.joinpath("input")
+            input_dir_persistent = source_type_base_dir.joinpath("input")
+            input_dir_persistent.mkdir(parents=True, exist_ok=True)
+            input_dir_persistent.mkdir(parents=True, exist_ok=True)
+            output_dir_persistent = source_type_base_dir.joinpath("analysis")
+            output_dir_persistent = source_type_base_dir.joinpath("analysis")
+            output_dir_persistent.mkdir(parents=True, exist_ok=True)
+            output_dir_persistent.mkdir(parents=True, exist_ok=True)
+            # Step 1: Prepare local input directory based on method
+            # Step 1: Prepare local input directory based on method
+            if upload_option == "Upload Files":
+            if upload_option == "Upload Files":
+                # Clean up existing files in the persistent input directory before writing new ones
+                for file_in_dir in input_dir_persistent.iterdir():
+                for file_in_dir in input_dir_persistent.iterdir():
+                    if file_in_dir.is_file():
+                    if file_in_dir.is_file():
+                        file_in_dir.unlink()
+                        file_in_dir.unlink()
+                if not uploaded_files:
+                if not uploaded_files:
+                    st.error("? No files uploaded. Please select files or change input method.")
+                    st.error("? No files uploaded. Please select files or change input method.")
+                    st.stop()
+                    st.stop()
+                for file_obj in uploaded_files:
+                for file_obj in uploaded_files:
+                    with open(input_dir_persistent.joinpath(file_obj.name), "wb") as f:
+                    with open(input_dir_persistent.joinpath(file_obj.name), "wb") as f:
+                        f.write(file_obj.read())
+                        f.write(file_obj.read())
+                local_input_path = input_dir_persistent
+                local_input_path = input_dir_persistent
+                st.info(f"Uploaded files saved to: {local_input_path}")
+                st.info(f"Uploaded files saved to: {local_input_path}")
+            elif upload_option == "Upload Folder (Zip)":
+            elif upload_option == "Upload Folder (Zip)":
+                if not zip_file_input:
+                if not zip_file_input:
+                    st.error("? Please upload a zip file.")
+                    st.error("? Please upload a zip file.")
+                    st.stop()
+                    st.stop()
+                # Extract uploaded .zip file
+                zip_extract_dir = input_dir_persistent.joinpath("unzipped_files")
+                zip_extract_dir = input_dir_persistent.joinpath("unzipped_files")
+                zip_extract_dir.mkdir(parents=True, exist_ok=True)
+                zip_extract_dir.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(zip_file_input, 'r') as zip_ref:
+                with zipfile.ZipFile(zip_file_input, 'r') as zip_ref:
+                    zip_ref.extractall(zip_extract_dir)
+                    zip_ref.extractall(zip_extract_dir)
+                local_input_path = zip_extract_dir
+                local_input_path = zip_extract_dir
+                st.info(f"Extracted zip file to: {local_input_path}")
+                st.info(f"Extracted zip file to: {local_input_path}")
+            else:
+            else:
+                st.error("? Please upload files or provide a folder path.")
+                st.error("? Please upload files or provide a folder path.")
+                st.stop()
+                st.stop()
+            # Step 2: Define local output file
+            # Step 2: Define local output file with clean name
+            local_output_file = output_dir_persistent.joinpath(f"{source_type_cli}-inventory.xlsx")
+            local_output_file = output_dir_persistent.joinpath(f"{source_type_folder}-inventory.xlsx")
+            st.info(f"Output report will be written to: {local_output_file}")
+            st.info(f"Output report will be written to: {local_output_file}")
+            # Step 3: Run LakeBridge analysis locally using CLI
+            # Step 3: Run LakeBridge CLI
+            lakebridge_cmd = (
+            lakebridge_cmd = (
+                f'databricks labs lakebridge analyze '
+                f'databricks labs lakebridge analyze '
+                f'--source-tech "{source_type_cli}" '
+                f'--source-tech "{source_type_cli}" '
+                f'--source-directory "{local_input_path}" '
+                f'--source-directory "{local_input_path}" '
+                f'--report-file "{local_output_file}"'
+                f'--report-file "{local_output_file}"'
+            )
+            )
+            st.info(f"Executing command: {lakebridge_cmd}")
+            st.info(f"Executing command: {lakebridge_cmd}")
+            result = subprocess.run(lakebridge_cmd, shell=True, check=True, capture_output=True, text=True)
+            result = subprocess.run(lakebridge_cmd, shell=True, check=True, capture_output=True, text=True)
+            
+            if result.stdout:
+            if result.stdout:
+                st.code(result.stdout, language='bash')
+                st.code(result.stdout, language='bash')
+            if result.stderr:
+            if result.stderr:
+                st.subheader("CLI Standard Error:")
+                st.subheader("CLI Standard Error:")
+                st.code(result.stderr, language='bash')
+                st.code(result.stderr, language='bash')
+            # Step 4: Present the output
+            # Step 4: Present the output
+            if local_output_file.exists():
+            if local_output_file.exists():
+                with open(local_output_file, "rb") as f:
+                with open(local_output_file, "rb") as f:
+                    st.success("? Analysis completed successfully!")
+                    st.success("? Analysis completed successfully!")
+                    st.download_button(
+                    st.download_button(
+                        label="?? Download analysis.xlsx",
+                        label="?? Download analysis.xlsx",
+                        data=f,
+                        data=f,
+                        file_name=f"{source_type_cli}-inventory.xlsx",
+                        file_name=f"{source_type_folder}-inventory.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    )
+            else:
+            else:
+                st.error("? Analysis completed but output file not found. Check CLI output above for errors.")
+                st.error("? Analysis completed but output file not found. Check CLI output above for errors.")
+        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError as e:
+            st.error(f"? CLI Error: Command '{e.cmd}' returned non-zero exit status {e.returncode}.")
+            st.error(f"? CLI Error: Command '{e.cmd}' returned non-zero exit status {e.returncode}.")
+            if e.stdout:
+            if e.stdout:
+                st.subheader("CLI Standard Output (on error):")
+                st.subheader("CLI Standard Output (on error):")
+                st.code(e.stdout, language='bash')
+                st.code(e.stdout, language='bash')
+            if e.stderr:
+            if e.stderr:
+                st.subheader("CLI Standard Error (on error):")
+                st.subheader("CLI Standard Error (on error):")
+                st.code(e.stderr, language='bash')
+                st.code(e.stderr, language='bash')
+        except Exception as e:
+        except Exception as e:
+            st.error(f"? Unexpected Error: {e}")
+            st.error(f"? Unexpected Error: {e}")
+        finally:
+        finally:
+            pass
+            pass
+ 		
+import streamlit as st
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+import shutil
+import zipfile
+
+# --- Configuration for Base Directory ---
+BASE_TESTING_DIR = Path("C:/Users/lakebridge/Lakebridge-Testing-Files")
+
+# Title
+st.image("assets/tiger_icon.png", width=100)
+st.title("?? Tiger CodeAnalyzer")
+
+# Input source section
+st.subheader("?? Provide Input Source Code")
+
+upload_option = st.radio("Choose input method:", ["Upload Files", "Upload Folder (Zip)"])
+
+uploaded_files = None
+zip_file_input = None
+
+if upload_option == "Upload Files":
+    uploaded_files = st.file_uploader("Upload .sql / .xml files", accept_multiple_files=True, type=['sql', 'xml'])
+elif upload_option == "Upload Folder (Zip)":
+    zip_file_input = st.file_uploader("Upload .zip file", type=['zip'])
+
+# Dropdown for technology selection
+tech_options_display = [
+    "ABInitio", "ADF", "Alteryx", "Athena", "BigQuery", "BODS", "Cloudera (Impala)",
+    "Datastage", "Greenplum", "Hive", "IBM DB2", "Informatica - Big Data Edition",
+    "Informatica - PC", "Informatica Cloud", "MS SQL Server", "Netezza", "Oozie",
+    "Oracle", "Oracle Data Integrator", "PentahoDI", "PIG", "Presto", "PySpark",
+    "Redshift", "SAPHANA - CalcViews", "SAS", "Snowflake", "SPSS", "SQOOP", "SSIS",
+    "SSRS", "Synapse", "Talend", "Teradata", "Vertica", "Others"
+]
+
+# --- VERIFIED MAPPING (based on common CLI patterns for tools like LakeBridge) ---
+tech_options_cli_mapping = {
+    "ABInitio": "ABInitio",
+    "ADF": "ADF",
+    "Alteryx": "Alteryx",
+    "Athena": "Athena",
+    "BigQuery": "BigQuery",
+    "BODS": "BODS",
+    "Cloudera (Impala)": "ClouderaImpala",
+    "Datastage": "Datastage",
+    "Greenplum": "Greenplum",
+    "Hive": "Hive",
+    "IBM DB2": "IBMDB2",
+    "Informatica - Big Data Edition": "InformaticaBigDataEdition",
+    "Informatica - PC": "Informatica - PC",
+    "Informatica Cloud": "Informatica Cloud",
+    "MS SQL Server": "MSSQLServer",
+    "Netezza": "Netezza",
+    "Oozie": "Oozie",
+    "Oracle": "Oracle",
+    "Oracle Data Integrator": "OracleDataIntegrator",
+    "PentahoDI": "PentahoDI",
+    "PIG": "PIG",
+    "Presto": "Presto",
+    "PySpark": "PySpark",
+    "Redshift": "Redshift",
+    "SAPHANA - CalcViews": "SAPHANACalcViews",
+    "SAS": "SAS",
+    "Snowflake": "Snowflake",
+    "SPSS": "SPSS",
+    "SQOOP": "SQOOP",
+    "SSIS": "SSIS",
+    "SSRS": "SSRS",
+    "Synapse": "Synapse",
+    "Talend": "Talend",
+    "Teradata": "Teradata",
+    "Vertica": "Vertica",
+    "Others": "Generic"
+}
+
+selected_tech_display = st.selectbox("Select Source Technology", tech_options_display)
+source_type_cli = tech_options_cli_mapping.get(selected_tech_display, "Generic")
+
+# Analyze button
+if st.button("?? ANALYZE"):
+
+    with st.spinner("Running analysis..."):
+        local_input_path = None
+        local_output_file = None
+
+        try:
+            BASE_TESTING_DIR.mkdir(parents=True, exist_ok=True)
+
+            source_type_base_dir = BASE_TESTING_DIR.joinpath(source_type_cli)
+            source_type_base_dir.mkdir(parents=True, exist_ok=True)
+
+            input_dir_persistent = source_type_base_dir.joinpath("input")
+            input_dir_persistent.mkdir(parents=True, exist_ok=True)
+
+            output_dir_persistent = source_type_base_dir.joinpath("analysis")
+            output_dir_persistent.mkdir(parents=True, exist_ok=True)
+
+            # Step 1: Prepare local input directory based on method
+            if upload_option == "Upload Files":
+                # Clean up existing files in the persistent input directory before writing new ones
+                for file_in_dir in input_dir_persistent.iterdir():
+                    if file_in_dir.is_file():
+                        file_in_dir.unlink()
+
+                if not uploaded_files:
+                    st.error("? No files uploaded. Please select files or change input method.")
+                    st.stop()
+
+                for file_obj in uploaded_files:
+                    with open(input_dir_persistent.joinpath(file_obj.name), "wb") as f:
+                        f.write(file_obj.read())
+                local_input_path = input_dir_persistent
+                st.info(f"Uploaded files saved to: {local_input_path}")
+            elif upload_option == "Upload Folder (Zip)":
+                if not zip_file_input:
+                    st.error("? Please upload a zip file.")
+                    st.stop()
+
+                # Extract uploaded .zip file
+                zip_extract_dir = input_dir_persistent.joinpath("unzipped_files")
+                zip_extract_dir.mkdir(parents=True, exist_ok=True)
+
+                with zipfile.ZipFile(zip_file_input, 'r') as zip_ref:
+                    zip_ref.extractall(zip_extract_dir)
+
+                local_input_path = zip_extract_dir
+                st.info(f"Extracted zip file to: {local_input_path}")
+            else:
+                st.error("? Please upload files or provide a folder path.")
+                st.stop()
+
+            # Step 2: Define local output file
+            local_output_file = output_dir_persistent.joinpath(f"{source_type_cli}-inventory.xlsx")
+            st.info(f"Output report will be written to: {local_output_file}")
+
+            # Step 3: Run LakeBridge analysis locally using CLI
+            lakebridge_cmd = (
+                f'databricks labs lakebridge analyze '
+                f'--source-tech "{source_type_cli}" '
+                f'--source-directory "{local_input_path}" '
+                f'--report-file "{local_output_file}"'
+            )
+
+            st.info(f"Executing command: {lakebridge_cmd}")
+            result = subprocess.run(lakebridge_cmd, shell=True, check=True, capture_output=True, text=True)
+            
+            if result.stdout:
+                st.code(result.stdout, language='bash')
+            if result.stderr:
+                st.subheader("CLI Standard Error:")
+                st.code(result.stderr, language='bash')
+
+            # Step 4: Present the output
+            if local_output_file.exists():
+                with open(local_output_file, "rb") as f:
+                    st.success("? Analysis completed successfully!")
+                    st.download_button(
+                        label="?? Download analysis.xlsx",
+                        data=f,
+                        file_name=f"{source_type_cli}-inventory.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            else:
+                st.error("? Analysis completed but output file not found. Check CLI output above for errors.")
+        except subprocess.CalledProcessError as e:
+            st.error(f"? CLI Error: Command '{e.cmd}' returned non-zero exit status {e.returncode}.")
+            if e.stdout:
+                st.subheader("CLI Standard Output (on error):")
+                st.code(e.stdout, language='bash')
+            if e.stderr:
+                st.subheader("CLI Standard Error (on error):")
+                st.code(e.stderr, language='bash')
+        except Exception as e:
+            st.error(f"? Unexpected Error: {e}")
+        finally:
+            pass
+
+ 
