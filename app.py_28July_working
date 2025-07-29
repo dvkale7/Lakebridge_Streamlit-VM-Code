@@ -1,0 +1,153 @@
+import streamlit as st
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+import shutil
+
+# --- Configuration for Base Directory ---
+BASE_TESTING_DIR = Path("C:/Users/lakebridge/Lakebridge-Testing-Files")
+
+# Title
+st.title("🧠 LakeBridge Analyzer")
+
+# Input source section
+st.subheader("📂 Provide Input Source Code")
+
+upload_option = st.radio("Choose input method:", ["Upload Files", "Enter Folder Path"])
+
+uploaded_files = None
+folder_path_input = None
+
+if upload_option == "Upload Files":
+    uploaded_files = st.file_uploader("Upload .sql / .xml files", accept_multiple_files=True, type=['sql', 'xml'])
+else:
+    folder_path_input = st.text_input("Enter full folder path (local path)")
+
+# Dropdown for technology selection
+tech_options_display = [
+    "ABInitio", "ADF", "Alteryx", "Athena", "BigQuery", "BODS", "Cloudera (Impala)",
+    "Datastage", "Greenplum", "Hive", "IBM DB2", "Informatica - Big Data Edition",
+    "Informatica - PC", "Informatica Cloud", "MS SQL Server", "Netezza", "Oozie",
+    "Oracle", "Oracle Data Integrator", "PentahoDI", "PIG", "Presto", "PySpark",
+    "Redshift", "SAPHANA - CalcViews", "SAS", "Snowflake", "SPSS", "SQOOP", "SSIS",
+    "SSRS", "Synapse", "Talend", "Teradata", "Vertica", "Others"
+]
+
+tech_options_cli_mapping = {
+    "ABInitio": "ABInitio",
+    "ADF": "ADF",
+    "Alteryx": "Alteryx",
+    "Athena": "Athena",
+    "BigQuery": "BigQuery",
+    "BODS": "BODS",
+    "Cloudera (Impala)": "ClouderaImpala",
+    "Datastage": "Datastage",
+    "Greenplum": "Greenplum",
+    "Hive": "Hive",
+    "IBM DB2": "IBMDB2",
+    "Informatica - Big Data Edition": "InformaticaBigDataEdition",
+    "Informatica - PC": "InformaticaPC",
+    "Informatica Cloud": "InformaticaCloud",
+    "MS SQL Server": "MSSQLServer",
+    "Netezza": "Netezza",
+    "Oozie": "Oozie",
+    "Oracle": "Oracle",
+    "Oracle Data Integrator": "OracleDataIntegrator",
+    "PentahoDI": "PentahoDI",
+    "PIG": "PIG",
+    "Presto": "Presto",
+    "PySpark": "PySpark",
+    "Redshift": "Redshift",
+    "SAPHANA - CalcViews": "SAPHANACalcViews",
+    "SAS": "SAS",
+    "Snowflake": "Snowflake",
+    "SPSS": "SPSS",
+    "SQOOP": "SQOOP",
+    "SSIS": "SSIS",
+    "SSRS": "SSRS",
+    "Synapse": "Synapse",
+    "Talend": "Talend",
+    "Teradata": "Teradata",
+    "Vertica": "Vertica",
+    "Others": "Generic"
+}
+
+selected_tech_display = st.selectbox("Select Source Technology", tech_options_display)
+source_type_cli = tech_options_cli_mapping.get(selected_tech_display, "Generic")
+
+if st.button("🔍 ANALYZE"):
+    with st.spinner("Running analysis..."):
+        try:
+            source_type_safe = source_type_cli.replace(" ", "").replace("-", "")
+            source_type_base_dir = BASE_TESTING_DIR.joinpath(source_type_safe)
+            input_dir = source_type_base_dir.joinpath("input")
+            output_dir = source_type_base_dir.joinpath("analysis")
+            input_dir.mkdir(parents=True, exist_ok=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            if upload_option == "Upload Files":
+                for file in input_dir.glob("*"):
+                    file.unlink()
+                if not uploaded_files:
+                    st.error("❌ No files uploaded.")
+                    st.stop()
+                for file_obj in uploaded_files:
+                    with open(input_dir.joinpath(file_obj.name), "wb") as f:
+                        f.write(file_obj.read())
+                local_input_path = input_dir
+            else:
+                if not folder_path_input:
+                    st.error("❌ Please provide a folder path.")
+                    st.stop()
+                user_provided_path = Path(folder_path_input)
+                st.success({user_provided_path})
+                if not user_provided_path.exists():
+                    st.error("❌ Provided folder does not exist.")
+                    st.stop()
+                # Copy to safe directory if original path has spaces or dashes
+                if ' ' in str(user_provided_path) or '-' in str(user_provided_path):
+                    shutil.rmtree(input_dir, ignore_errors=True)
+                    shutil.copytree(user_provided_path, input_dir)
+                    st.warning(f"⚠️ Path had spaces/dashes. Copied to: {input_dir}")
+                else:
+                    input_dir = user_provided_path
+                local_input_path = input_dir
+
+            local_output_file = output_dir.joinpath(f"{source_type_safe}-inventory.xlsx")
+
+            cmd = (
+                f'databricks labs lakebridge analyze '
+                f'--source-tech "{selected_tech_display}" '
+                f'--source-directory "{local_input_path}" '
+                f'--report-file "{local_output_file}"'
+            )
+
+            st.info(f"Running command: {cmd}")
+            result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+
+            if result.stdout:
+                st.code(result.stdout)
+            if result.stderr:
+                st.code(result.stderr)
+
+            if local_output_file.exists():
+                with open(local_output_file, "rb") as f:
+                    st.success("✅ Analysis complete.")
+                    st.download_button(
+                        label="📥 Download Report",
+                        data=f,
+                        file_name=local_output_file.name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            else:
+                st.error("❌ Output file not found.")
+
+        except subprocess.CalledProcessError as e:
+            st.error(f"❌ Command failed with exit code {e.returncode}.")
+            if e.stdout:
+                st.code(e.stdout)
+            if e.stderr:
+                st.code(e.stderr)
+        except Exception as e:
+            st.error(f"❌ Unexpected error: {e}")
